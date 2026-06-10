@@ -96,6 +96,69 @@ public sealed class DemoEventSource : System.Diagnostics.Tracing.EventSource
         }
 
         [Test]
+        public async Task No_Warn_On_Non_Void_Method()
+        {
+            // Only void-returning methods are implicit event methods, so non-void methods must not be flagged.
+            string code = @"
+[System.Diagnostics.Tracing.EventSource(Name = ""Demo"")]
+public sealed class DemoEventSource : System.Diagnostics.Tracing.EventSource
+{
+    private int Compute() => 42;
+
+    private string GetName() { return string.Empty; }
+
+    [System.Diagnostics.Tracing.Event(1)]
+    public void AppStarted(string message) => WriteEvent(1, message);
+}";
+
+            await VerifyCS.VerifyAsync(code);
+        }
+
+        [Test]
+        public async Task No_Warn_When_NonEvent_Method_Precedes_Implicit_Event()
+        {
+            // A [NonEvent] method must not shift the inferred ordinal id of the implicit event method.
+            // Here the implicit event method is the 2nd ordinary method but the 1st actual event, so its id is 1
+            // and WriteEvent(1, ...) must match.
+            string code = @"
+[System.Diagnostics.Tracing.EventSource(Name = ""Demo"")]
+public sealed class DemoEventSource : System.Diagnostics.Tracing.EventSource
+{
+    [System.Diagnostics.Tracing.NonEvent]
+    public void Helper() {}
+
+    public void AppStarted(string message) => WriteEvent(1, message);
+}";
+
+            await VerifyCS.VerifyAsync(code);
+        }
+
+        [Test]
+        public async Task No_Warn_On_Properties()
+        {
+            string code = @"
+[System.Diagnostics.Tracing.EventSource(Name = ""Demo"")]
+public sealed class DemoEventSource : System.Diagnostics.Tracing.EventSource
+{
+    private int AutoProperty { get; set; }
+
+    private string ExpressionProperty => string.Empty;
+
+    private int _field;
+    private int FullProperty
+    {
+        get => _field;
+        set => _field = value;
+    }
+
+    [System.Diagnostics.Tracing.Event(1)]
+    public void AppStarted(string message) => WriteEvent(1, message);
+}";
+
+            await VerifyCS.VerifyAsync(code);
+        }
+
+        [Test]
         public async Task Warn_On_Count_Mismatch_Core()
         {
             string code = @"
